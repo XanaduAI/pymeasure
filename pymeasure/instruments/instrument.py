@@ -22,8 +22,16 @@
 # THE SOFTWARE.
 #
 
+
+import abc
+import functools
 import logging
+import threading
+from socket import error as socket_error
+from time import sleep, time
+
 import numpy as np
+
 from pymeasure.adapters.visa import VISAAdapter
 
 log = logging.getLogger(__name__)
@@ -31,7 +39,7 @@ log.addHandler(logging.NullHandler())
 
 
 class DynamicProperty(property):
-    """ Class that allows managing python property behaviour in a "dynamic" fashion
+    """Class that allows managing python property behaviour in a "dynamic" fashion
 
     The class allows passing, in addition to regular property parameters, a list of
     runtime configurable parameters.
@@ -56,8 +64,16 @@ class DynamicProperty(property):
                    parameters.
     """
 
-    def __init__(self, fget=None, fset=None, fdel=None, doc=None, fget_params_list=None,
-                 fset_params_list=None, prefix=""):
+    def __init__(
+        self,
+        fget=None,
+        fset=None,
+        fdel=None,
+        doc=None,
+        fget_params_list=None,
+        fset_params_list=None,
+        prefix="",
+    ):
         super().__init__(fget, fset, fdel, doc)
         self.fget_params_list = () if fget_params_list is None else fget_params_list
         self.fset_params_list = () if fset_params_list is None else fset_params_list
@@ -93,7 +109,7 @@ class DynamicProperty(property):
 
 
 class Instrument:
-    """ The base class for all Instrument definitions.
+    """The base class for all Instrument definitions.
 
     It makes use of one of the :py:class:`~pymeasure.adapters.Adapter` classes for communication
     with the connected hardware device. This decouples the instrument/command definition from the
@@ -126,41 +142,62 @@ class Instrument:
 
     # Variable holding the list of DynamicProperty parameters that are configurable
     # by users
-    _fget_params_list = ('get_command',
-                         'values',
-                         'map_values',
-                         'get_process',
-                         'command_process',
-                         'check_get_errors')
+    _fget_params_list = (
+        "get_command",
+        "values",
+        "map_values",
+        "get_process",
+        "command_process",
+    )
 
-    _fset_params_list = ('set_command',
-                         'validator',
-                         'values',
-                         'map_values',
-                         'set_process',
-                         'command_process',
-                         'check_set_errors')
+    _fset_params_list = (
+        "set_command",
+        "validator",
+        "values",
+        "map_values",
+        "set_process",
+        "command_process",
+    )
 
     # Prefix used to store reserved variables
     __reserved_prefix = "___"
+
+    @property
+    @abc.abstractmethod
+    def id_starts_with(self):
+        ...
+
+    @staticmethod
+    def connect(temp_adapter, **kwargs):
+        return VISAAdapter(temp_adapter, **kwargs)
 
     # noinspection PyPep8Naming
     def __init__(self, adapter, name, includeSCPI=True, **kwargs):
         try:
             if isinstance(adapter, (int, str)):
-                adapter = VISAAdapter(adapter, **kwargs)
+                adapter = self.connect(adapter, **kwargs)
         except ImportError:
-            raise Exception("Invalid Adapter provided for Instrument since "
-                            "PyVISA is not present")
+            raise Exception(
+                "Invalid Adapter provided for Instrument since PyVISA is not present"
+            )
 
         self.name = name
         self.SCPI = includeSCPI
         self.adapter = adapter
+        self._lock = threading.Lock()
+        self._flush_errors()
+
+        idn = self.get_id()
+        if not idn.startswith(self.id_starts_with):
+            log.warning(f"Could not retrieve ID for {self.adapter}")
+            self.communication_success = False
+        else:
+            log.info(f"IDN: {idn}")
+            log.info(f"Connected to {self.name}")
+            self.communication_success = True
 
         self.isShutdown = False
         self._special_names = self._setup_special_names()
-
-        log.info("Initializing %s." % self.name)
 
     def __enter__(self):
         return self
@@ -169,7 +206,7 @@ class Instrument:
         self.shutdown()
 
     def _setup_special_names(self):
-        """ Return list of class/instance special names
+        """Return list of class/instance special names
 
         Compute the list of special names based on the list of
         class attributes that are a DynamicProperty. Check also for class variables
@@ -191,103 +228,197 @@ class Instrument:
         return special_names
 
     def __setattr__(self, name, value):
-        """ Add reserved_prefix in front of special variables """
-        if hasattr(self, '_special_names'):
+        """Add reserved_prefix in front of special variables"""
+        if hasattr(self, "_special_names"):
             if name in self._special_names:
                 name = self.__reserved_prefix + name
         super().__setattr__(name, value)
 
     def __getattribute__(self, name):
-        """ Prevent read access to variables with special names used to
-        support dynamic property behaviour """
-        if name in ('_special_names', '__dict__'):
+        """Prevent read access to variables with special names used to
+        support dynamic property behaviour"""
+        if name in ("_special_names", "__dict__"):
             return super().__getattribute__(name)
-        if hasattr(self, '_special_names'):
+        if hasattr(self, "_special_names"):
             if name in self._special_names:
                 raise AttributeError(
-                    f"{name} is a reserved variable name and it cannot be read")
+                    f"{name} is a reserved variable name and it cannot be read"
+                )
         return super().__getattribute__(name)
 
     @property
     def complete(self):
-        """ This property allows synchronization between a controller and a device. The Operation Complete
+        """This property allows synchronization between a controller and a device. The Operation Complete
         query places an ASCII character 1 into the device's Output Queue when all pending
         selected device operations have been finished.
         """
         if self.SCPI:
-            return self.ask("*OPC?").strip()
+            ready = self.ask_no_lock("*OPC?").strip()
+            if ready == "1":
+                return True
+            elif ready == "0":
+                return False
+            else:
+                return None
         else:
-            raise NotImplementedError("Non SCPI instruments require implementation in subclasses")
+            raise NotImplementedError(
+                "Non SCPI instruments require implementation in subclasses"
+            )
 
     @property
-    def status(self):
-        """ Requests and returns the status byte and Master Summary Status bit. """
-        if self.SCPI:
-            return self.ask("*STB?").strip()
-        else:
-            raise NotImplementedError("Non SCPI instruments require implementation in subclasses")
+    @abc.abstractmethod
+    def status(self) -> str:
+        """Checks the status of the system. Must be implemented in all concrete drivers."""
 
     @property
     def options(self):
-        """ Requests and returns the device options installed. """
+        """Requests and returns the device options installed."""
         if self.SCPI:
             return self.ask("*OPT?").strip()
         else:
-            raise NotImplementedError("Non SCPI instruments require implementation in subclasses")
+            raise NotImplementedError(
+                "Non SCPI instruments require implementation in subclasses"
+            )
 
-    @property
-    def id(self):
-        """ Requests and returns the identification of the instrument. """
+    def wait_and_check_errors(func):
+        """
+        Decorator used to wait until the system is ready to process the next
+        command, and subsequently check for errors.
+        """
+
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            with self._lock:
+                self._wait_until_ready()
+                result = func(self, *args, **kwargs)
+                self.check_errors()
+                return result
+
+        return wrapper
+
+    def get_id(self, check_for_errors=True) -> str:
+        """Requests and returns the identification of the instrument."""
         if self.SCPI:
-            return self.ask("*IDN?").strip()
+            return self.ask("*IDN?", check_for_errors).strip()
         else:
-            raise NotImplementedError("Non SCPI instruments require implementation in subclasses")
+            raise NotImplementedError(
+                "Non SCPI instruments require implementation in subclasses"
+            )
+
+    def _wait_until_ready(self, timeout=10):
+        """Polls the system busy parameter until the device is ready to execute a new
+        operation. This method must be called after _lock has been acquired by the
+        respective process.
+
+        Args:
+            timeout: The number of seconds to wait before raising a TimeoutError.
+
+        """
+        end = time() + timeout
+        while not self.complete:
+            if time() > end:
+                raise TimeoutError(
+                    f"The operation did not complete in the timeout specified ({timeout} s)"
+                )
+            sleep(0.1)
 
     # Wrapper functions for the Adapter object
-    def ask(self, command):
-        """ Writes the command to the instrument through the adapter
+    def ask(self, command, check_for_errors=True):
+        """Writes the command to the instrument through the adapter
         and returns the read response.
 
         :param command: command string to be sent to the instrument
+        :param check_for_errors Flag indicating if error checking should be performed
         """
+        with self._lock:
+            if check_for_errors:
+                self._wait_until_ready()
+
+            response = self.adapter.ask(command)
+
+            if check_for_errors:
+                self.check_errors()
+        return response
+
+    def ask_no_lock(self, command):
         return self.adapter.ask(command)
 
+    @wait_and_check_errors
     def write(self, command):
-        """ Writes the command to the instrument through the adapter.
+        """Writes the command to the instrument through the adapter.
 
         :param command: command string to be sent to the instrument
         """
         self.adapter.write(command)
 
+    @wait_and_check_errors
     def read(self):
-        """ Reads from the instrument through the adapter and returns the
+        """Reads from the instrument through the adapter and returns the
         response.
         """
         return self.adapter.read()
 
+    @wait_and_check_errors
     def values(self, command, **kwargs):
-        """ Reads a set of values from the instrument through the adapter,
+        """Reads a set of values from the instrument through the adapter,
         passing on any key-word arguments.
         """
         return self.adapter.values(command, **kwargs)
 
+    @wait_and_check_errors
     def binary_values(self, command, header_bytes=0, dtype=np.float32):
         return self.adapter.binary_values(command, header_bytes, dtype)
 
+    def check_errors(self):
+
+        errors = self._flush_errors()
+
+        # Check if the errors list is empty
+        if errors:
+            raise RuntimeError(
+                f"Error read from error queue. First error read from the error queue is: {errors[0]}\nSee logs for more details"
+            )
+
+    def _flush_errors(self):
+        """Flushs the system's error queue and logs all errors. This method must be called
+        after _lock has been acquired by the respective process.
+
+        Returns:
+            List of strings giving all the errors read from the error queue - each element
+            contains an error code with the respective error description. If no errors are
+            read from the error queue, an empty list is returned.
+        """
+        if self.SCPI:
+            self._wait_until_ready()
+            errors = []
+            while True:
+                current_err = self.ask_no_lock("SYST:ERR?")
+                if not (current_err.startswith("+0")):
+                    log.error(f"Error read from error queue: {current_err}")
+                    errors.append(current_err)
+                else:
+                    break
+            return errors
+        else:
+            raise NotImplementedError(
+                "Non SCPI instruments require implementation in subclasses"
+            )
+
+    # flake8: noqa: C901
     @staticmethod
-    def control(get_command,  # noqa: C901 accept that this is a complex method
-                set_command,
-                docs,
-                validator=lambda v, vs: v,
-                values=(),
-                map_values=False,
-                get_process=lambda v: v,
-                set_process=lambda v: v,
-                command_process=lambda c: c,
-                check_set_errors=False,
-                check_get_errors=False,
-                dynamic=False,
-                **kwargs):
+    def control(
+        get_command,  # noqa: C901 accept that this is a complex method
+        set_command,
+        docs,
+        validator=lambda v, vs: v,
+        values=(),
+        map_values=False,
+        get_process=lambda v: v,
+        set_process=lambda v: v,
+        command_process=lambda c: c,
+        dynamic=False,
+        **kwargs,
+    ):
         """Returns a property for the class based on the supplied
         commands. This property may be set and read from the
         instrument. See also :meth:`measurement` and :meth:`setting`.
@@ -309,8 +440,6 @@ class Instrument:
             before value mapping, returning the processed value
         :param command_process: A function that takes a command and allows processing
             before executing the command
-        :param check_set_errors: Toggles checking errors after setting
-        :param check_get_errors: Toggles checking errors after getting
         :param dynamic: Specify whether the property parameters are meant to be changed in
             instances or subclasses.
 
@@ -346,19 +475,17 @@ class Instrument:
         considered reserved for dynamic property control.
         """
 
-        def fget(self,
-                 get_command=get_command,
-                 values=values,
-                 map_values=map_values,
-                 get_process=get_process,
-                 command_process=command_process,
-                 check_get_errors=check_get_errors,
-                 ):
+        def fget(
+            self,
+            get_command=get_command,
+            values=values,
+            map_values=map_values,
+            get_process=get_process,
+            command_process=command_process,
+        ):
             if get_command is None:
                 raise LookupError("Instrument property can not be read.")
             vals = self.values(command_process(get_command), **kwargs)
-            if check_get_errors:
-                self.check_errors()
             if len(vals) == 1:
                 value = get_process(vals[0])
                 if not map_values:
@@ -372,23 +499,23 @@ class Instrument:
                     raise KeyError(f"Value {value} not found in mapped values")
                 else:
                     raise ValueError(
-                        'Values of type `{}` are not allowed '
-                        'for Instrument.control'.format(type(values))
+                        "Values of type `{}` are not allowed "
+                        "for Instrument.control".format(type(values))
                     )
             else:
                 vals = get_process(vals)
                 return vals
 
-        def fset(self,
-                 value,
-                 set_command=set_command,
-                 validator=validator,
-                 values=values,
-                 map_values=map_values,
-                 set_process=set_process,
-                 command_process=command_process,
-                 check_set_errors=check_set_errors,
-                 ):
+        def fset(
+            self,
+            value,
+            set_command=set_command,
+            validator=validator,
+            values=values,
+            map_values=map_values,
+            set_process=set_process,
+            command_process=command_process,
+        ):
 
             if set_command is None:
                 raise LookupError("Instrument property can not be set.")
@@ -402,30 +529,38 @@ class Instrument:
                 value = values[value]
             else:
                 raise ValueError(
-                    'Values of type `{}` are not allowed '
-                    'for Instrument.control'.format(type(values))
+                    "Values of type `{}` are not allowed "
+                    "for Instrument.control".format(type(values))
                 )
             self.write(command_process(set_command) % value)
-            if check_set_errors:
-                self.check_errors()
 
         # Add the specified document string to the getter
         fget.__doc__ = docs
 
         if dynamic:
             fget.__doc__ += "(dynamic)"
-            return DynamicProperty(fget=fget, fset=fset,
-                                   fget_params_list=Instrument._fget_params_list,
-                                   fset_params_list=Instrument._fset_params_list,
-                                   prefix=Instrument.__reserved_prefix)
+            return DynamicProperty(
+                fget=fget,
+                fset=fset,
+                fget_params_list=Instrument._fget_params_list,
+                fset_params_list=Instrument._fset_params_list,
+                prefix=Instrument.__reserved_prefix,
+            )
         else:
             return property(fget, fset)
 
     @staticmethod
-    def measurement(get_command, docs, values=(), map_values=None,
-                    get_process=lambda v: v, command_process=lambda c: c,
-                    check_get_errors=False, dynamic=False, **kwargs):
-        """ Returns a property for the class based on the supplied
+    def measurement(
+        get_command,
+        docs,
+        values=(),
+        map_values=None,
+        get_process=lambda v: v,
+        command_process=lambda c: c,
+        dynamic=False,
+        **kwargs,
+    ):
+        """Returns a property for the class based on the supplied
         commands. This is a measurement quantity that may only be
         read from the instrument, not set.
 
@@ -439,28 +574,33 @@ class Instrument:
             before value mapping, returning the processed value
         :param command_process: A function that take a command and allows processing
             before executing the command, for getting
-        :param check_get_errors: Toggles checking errors after getting
         :param dynamic: Specify whether the property parameters are meant to be changed in
             instances or subclasses. See :meth:`control` for an usage example.
         """
 
-        return Instrument.control(get_command=get_command,
-                                  set_command=None,
-                                  docs=docs,
-                                  values=values,
-                                  map_values=map_values,
-                                  get_process=get_process,
-                                  command_process=command_process,
-                                  check_get_errors=check_get_errors,
-                                  dynamic=dynamic,
-                                  **kwargs)
+        return Instrument.control(
+            get_command=get_command,
+            set_command=None,
+            docs=docs,
+            values=values,
+            map_values=map_values,
+            get_process=get_process,
+            command_process=command_process,
+            dynamic=dynamic,
+            **kwargs,
+        )
 
     @staticmethod
-    def setting(set_command, docs,
-                validator=lambda x, y: x, values=(), map_values=False,
-                set_process=lambda v: v,
-                check_set_errors=False, dynamic=False,
-                **kwargs):
+    def setting(
+        set_command,
+        docs,
+        validator=lambda x, y: x,
+        values=(),
+        map_values=False,
+        set_process=lambda v: v,
+        dynamic=False,
+        **kwargs,
+    ):
         """Returns a property for the class based on the supplied
         commands. This property may be set, but raises an exception
         when being read from the instrument.
@@ -475,56 +615,46 @@ class Instrument:
             interpreted as a map
         :param set_process: A function that takes a value and allows processing
             before value mapping, returning the processed value
-        :param check_set_errors: Toggles checking errors after setting
         :param dynamic: Specify whether the property parameters are meant to be changed in
             instances or subclasses. See :meth:`control` for an usage example.
         """
 
-        return Instrument.control(get_command=None,
-                                  set_command=set_command,
-                                  docs=docs,
-                                  validator=validator,
-                                  values=values,
-                                  map_values=map_values,
-                                  set_process=set_process,
-                                  check_set_errors=check_set_errors,
-                                  dynamic=dynamic,
-                                  **kwargs)
+        return Instrument.control(
+            get_command=None,
+            set_command=set_command,
+            docs=docs,
+            validator=validator,
+            values=values,
+            map_values=map_values,
+            set_process=set_process,
+            dynamic=dynamic,
+            **kwargs,
+        )
 
     def clear(self):
-        """ Clears the instrument status byte
-        """
+        """Clears the instrument status byte"""
         if self.SCPI:
             self.write("*CLS")
         else:
-            raise NotImplementedError("Non SCPI instruments require implementation in subclasses")
+            raise NotImplementedError(
+                "Non SCPI instruments require implementation in subclasses"
+            )
 
     def reset(self):
-        """ Resets the instrument. """
+        """Resets the instrument."""
         if self.SCPI:
             self.write("*RST")
         else:
-            raise NotImplementedError("Non SCPI instruments require implementation in subclasses")
+            raise NotImplementedError(
+                "Non SCPI instruments require implementation in subclasses"
+            )
 
     def shutdown(self):
         """Brings the instrument to a safe and stable state"""
         self.isShutdown = True
         log.info("Shutting down %s" % self.name)
 
-    def check_errors(self):
-        """ Read all errors from the instrument.
 
-        :return: list of error entries
-        """
-        if self.SCPI:
-            errors = []
-            while True:
-                err = self.values("SYST:ERR?")
-                if int(err[0]) != 0:
-                    log.error(f"{self.name}: {err[0]}, {err[1]}")
-                    errors.append(err)
-                else:
-                    break
-            return errors
-        else:
-            raise NotImplementedError("Non SCPI instruments require implementation in subclasses")
+class BaseChannel(Instrument):
+    def __init__(self):
+        self._special_names = self._setup_special_names()

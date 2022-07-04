@@ -26,8 +26,12 @@ import time
 
 import numpy as np
 
-from pymeasure.instruments import Instrument
-from pymeasure.instruments.validators import strict_discrete_set, truncated_range
+from pymeasure.instruments.instrument import BaseChannel, Instrument
+from pymeasure.instruments.validators import (
+    strict_discrete_set,
+    strict_range,
+    truncated_range,
+)
 
 # Setup logging
 log = logging.getLogger(__name__)
@@ -37,40 +41,38 @@ log.addHandler(logging.NullHandler())
 class Keithley2600(Instrument):
     """Represents the Keithley 2600 series (channel A and B) SourceMeter"""
 
+    id_starts_with = "Keithley"
+
     def __init__(self, adapter, **kwargs):
+        self.ChA = Channel(self, "a")
+        self.ChB = Channel(self, "b")
         super().__init__(
             adapter, "Keithley 2600 SourceMeter", includeSCPI=False, **kwargs
         )
-        self.ChA = Channel(self, "a")
-        self.ChB = Channel(self, "b")
 
-    @property
-    def error(self):
-        """Returns a tuple of an error code and message from a
-        single error."""
-        err = self.ask("print(errorqueue.next())")
-        err = err.split("\t")
-        # Keithley Instruments Inc. sometimes on startup
-        # if tab delimitated message is greater than one, grab first two as code, message
-        # otherwise, assign code & message to returned error
-        if len(err) > 1:
-            err = (int(float(err[0])), err[1])
-            code = err[0]
-            message = err[1].replace('"', "")
-        else:
-            code = message = err[0]
-        log.info(f"ERROR {str(code)},{str(message)} - len {str(len(err))}")
-        return (code, message)
+    def _flush_errors(self):
+        """Returns a list of errors where each element includes the error code
+        and message.
+        """
+        self._wait_until_ready()
+        errors = []
+        while True:
+            err = self.ask_no_lock("print(errorqueue.next())")
+            err = err.split("\t")
+            # Keithley Instruments Inc. sometimes on startup
+            # if tab delimitated message is greater than one, grab first two as code, message
+            # otherwise, assign code & message to returned error
+            if len(err) > 1:
+                err = (int(float(err[0])), err[1])
+                code = err[0]
+                message = err[1].replace('"', "")
+                error_msg = f"ERROR {str(code)},{str(message)} - len {str(len(err))}"
+                log.error(error_msg)
+                errors.append(error_msg)
+            else:
+                break
 
-    def check_errors(self):
-        """Logs any system errors reported by the instrument."""
-        code, message = self.error
-        while code != 0:
-            t = time.time()
-            log.info(f"Keithley 2600 reported error: {code}, {message}")
-            code, message = self.error
-            if (time.time() - t) > 10:
-                log.warning("Timed out for Keithley 2600 error retrieval.")
+            return errors
 
     def clear(self):
         """Clears the instrument status byte"""
@@ -81,31 +83,59 @@ class Keithley2600(Instrument):
         self.write("*reset()")
 
     @property
+    def status(self) -> str:
+        """Checks the status of the system.
+
+        Returns:
+            "ok: busy" if the threading lock cannot be acquired, "ok: ON"
+            if the system is on and the lock was acquired. If communication
+            was not initially successfull, the system is queried again and
+            the ID is checked. If the system does not return an expected response,
+            status is set to warning: Cannot communicate with device".
+        """
+        if not self.communication_success:
+            id = self.get_id(check_for_errors=False)
+
+            if id.startswith(self.id_starts_with):
+                curr_status = "ok: ON"
+                self.communication_success = True
+            else:
+                curr_status = "warning: Cannot communicate with device"
+        else:
+            if self._lock.locked():
+                curr_status = "ok: busy"
+            else:
+                curr_status = "ok: ON"
+
+        return curr_status
+
+    @property
     def complete(self):
         """This property allows synchronization between a controller and a device. The Operation Complete
         query places an ASCII character 1 into the device's Output Queue when all pending
         selected device operations have been finished.
         """
-        return self.ask("waitcomplete() print([[1]])").strip()
+        ready = self.ask_no_lock("waitcomplete() print([[1]])").strip()
+        if ready == "1":
+            return True
+        elif ready == "0":
+            return False
+        else:
+            return None
 
-    @property
-    def status(self):
-        """Requests and returns the status byte and Master Summary Status bit."""
-        return self.ask("print(tostring(status.condition))").strip()
-
-    @property
-    def id(self):
+    def get_id(self, check_errors=True):
         """Requests and returns the identification of the instrument."""
         return self.ask(
-            "print([[Keithley Instruments, Model]]..localnode.model..[[,]]..\
-            localnode.serialno.. [[, ]]..localnode.revision)"
+            "print([[Keithley Instruments, Model]]..localnode.model..[[,]]..localnode.serialno.. [[, ]]..localnode.revision))",
+            check_errors,
         ).strip()
 
 
-class Channel:
+class Channel(BaseChannel):
     def __init__(self, instrument, channel):
         self.instrument = instrument
         self.channel = channel
+        super().__init__()
 
     def ask(self, cmd):
         return float(self.instrument.ask(f"print(smu{self.channel}.{cmd})"))
@@ -204,22 +234,24 @@ class Channel:
         "source.levelv",
         "source.levelv=%f",
         """ Property controlling the applied source voltage """,
-        validator=truncated_range,
+        validator=strict_range,
         values=[-200, 200],
+        dynamic=True,
     )
 
     compliance_voltage = Instrument.control(
         "source.limitv",
         "source.limitv=%f",
         """ Property controlling the source compliance voltage """,
-        validator=truncated_range,
+        validator=strict_range,
         values=[-200, 200],
+        dynamic=True,
     )
 
     source_voltage_range = Instrument.control(
         "source.rangev",
         "source.rangev=%f",
-        """Property controlling the source current range """,
+        """Property controlling the source voltage range """,
         validator=truncated_range,
         values=[-200, 200],
     )
@@ -265,7 +297,6 @@ class Channel:
             self.write("measure.autorangev=1")
         else:
             self.voltage_range = voltage
-        self.check_errors()
 
     def measure_current(self, nplc=1, current=1.05e-4, auto_range=True):
         """Configures the measurement of current.
@@ -280,7 +311,6 @@ class Channel:
             self.write("measure.autorangei=1")
         else:
             self.current_range = current
-        self.check_errors()
 
     def auto_range_source(self):
         """Configures the source to use an automatic range."""
@@ -304,7 +334,6 @@ class Channel:
         else:
             self.source_current_range = current_range
         self.compliance_voltage = compliance_voltage
-        self.check_errors()
 
     def apply_voltage(self, voltage_range=None, compliance_current=0.1):
         """Configures the instrument to apply a source voltage, and
@@ -321,7 +350,6 @@ class Channel:
         else:
             self.source_voltage_range = voltage_range
         self.compliance_current = compliance_current
-        self.check_errors()
 
     def ramp_to_voltage(self, target_voltage, steps=30, pause=0.1):
         """Ramps to a target voltage from the set voltage value over
