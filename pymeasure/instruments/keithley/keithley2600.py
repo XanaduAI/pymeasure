@@ -52,8 +52,7 @@ class Keithley2600(Instrument):
             adapter, "Keithley 2600 SourceMeter", includeSCPI=False, **kwargs
         )
 
-        # Sweep command times out at the default timeout duration
-        self.adapter.connection.timeout = 25000
+        self.default_timeout = self.adapter.connection.timeout
 
     def _flush_errors(self):
         """Returns a list of errors where each element includes the error code
@@ -138,25 +137,6 @@ class Keithley2600(Instrument):
 
     @staticmethod
     @pydantic.validate_arguments
-    def calculate_step_size(
-        sweep_start: float,
-        sweep_end: float,
-        number_of_sweep_points: pydantic.conint(ge=2),
-    ) -> float:
-        """Calculates the step size for a sweep given the relavant parameters.
-
-        Args:
-            sweep_start: Starting sweep value.
-            sweep_end: Ending sweep value.
-            number_of_sweep_points: Number of sweep steps being taken.
-
-        Returns:
-            Returns the sweep step as a float type.
-        """
-        return (sweep_end - sweep_start) / (number_of_sweep_points - 1)
-
-    @staticmethod
-    @pydantic.validate_arguments
     def get_sweep_list(
         sweep_start: float,
         sweep_end: float,
@@ -170,12 +150,16 @@ class Keithley2600(Instrument):
             number_of_sweep_points: Number of sweep steps being taken.
 
         Returns:
-            List of sweep steps (as float types)
+            List of sweep steps (as float types), and the step size as a float type.
         """
-        step = Keithley2600.calculate_step_size(
-            sweep_start.sweep_end, number_of_sweep_points
+
+        return np.linspace(
+            start=sweep_start,
+            stop=sweep_end,
+            num=number_of_sweep_points,
+            endpoint=True,
+            retstep=True,
         )
-        return list(range(sweep_start, sweep_end + step, step))
 
 
 class Channel(BaseChannel):
@@ -209,15 +193,17 @@ class Channel(BaseChannel):
         Returns:
             The data read from the buffer as a numpy array.
         """
+        initial_args = f"1, smu{self.channel}.nvbuffer{buffer_number}.n, smu{self.channel}.nvbuffer{buffer_number}"
+
         if cmd:
             return self.instrument.ascii_values(
-                f"printbuffer(1, smu{self.channel}.nvbuffer{buffer_number}.n, smu{self.channel}.nvbuffer{buffer_number}.{cmd})",
+                f"printbuffer({initial_args}.{cmd})",
                 container=np.array,
                 **kwargs,
             )
         else:
             return self.instrument.ascii_values(
-                f"printbuffer(1, smu{self.channel}.nvbuffer{buffer_number}.n, smu{self.channel}.nvbuffer{buffer_number})",
+                f"printbuffer({initial_args})",
                 container=np.array,
                 **kwargs,
             )
@@ -482,6 +468,7 @@ class Channel(BaseChannel):
         sweep_end_v: float,
         settling_time: pydantic.confloat(ge=0),
         number_of_sweep_points: pydantic.conint(ge=2),
+        timeout: int = 250000,
     ) -> np.ndarray:
         """Performs a inear voltage sweep with current measured at every step (point).
 
@@ -503,11 +490,18 @@ class Channel(BaseChannel):
             sweep_end_v: Ending sweep voltage (in volts).
             settling_time: The settling time used before making a measurement (in seconds).
             number_of_sweep_points: The number of points to sweep for.
+            timeout: Visa Timeout value in milliseconds. The sweep command causes a Visa timeout error
+                to be raised at the default timeout value. The timeout is changed to the specified value
+                before the sweep command is sent, and changed back to the default value before this method
+                returns. This parameter defaults to 25000 (25 seconds).
 
         Returns:
             Returns a 2D numpy array, with the first dimension being the measured voltage values,
                 and the second dimension being the measured current values.
         """
+        # Sweep command times out at the default timeout duration
+        self.adapter.connection.timeout = timeout
+
         self.clear_buffer(1)
         self.buffer_1_source_value_collection = True
 
@@ -517,7 +511,9 @@ class Channel(BaseChannel):
             f"SweepVLinMeasureI(smu{self.channel}, {sweep_start_v}, {sweep_end_v}, {settling_time}, {number_of_sweep_points})"
         )
         voltage_values = self.buffer_ascii_values(1, "sourcevalues")
-        measurement_values = self.buffer_ascii_values(1, "readings", delay=4)
+        measurement_values = self.buffer_ascii_values(1, "readings")
+
+        self.adapter.connection.timeout = self.default_timeout
         return np.array([voltage_values, measurement_values])
 
     def shutdown(self):

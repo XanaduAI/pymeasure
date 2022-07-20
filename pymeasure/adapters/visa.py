@@ -84,9 +84,9 @@ class VISAAdapter(Adapter):
 
         # Clean up kwargs considering the interface type matching resource_name
         if_type = self.manager.resource_info(self.resource_name).interface_type
-        for key in list(
-            kwargs.keys()
-        ):  # iterate over a copy of the keys as we modify kwargs
+
+        # iterate over a copy of the keys as we modify kwargs
+        for key in list(kwargs.keys()):
             # Remove all interface-specific kwargs:
             if key in pyvisa.constants.InterfaceType.__members__:
                 if getattr(pyvisa.constants.InterfaceType, key) is if_type:
