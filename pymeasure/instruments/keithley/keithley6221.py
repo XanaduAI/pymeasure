@@ -396,7 +396,7 @@ class Keithley6221(Instrument, KeithleyBuffer):
 
     def shutdown(self):
         """ Disables the output. """
-        log.info("Shutting down %s." % self.name)
+        log.info("Shutting down %s." % self.pymeasure_name)
         self.disable_source()
 
     ###############

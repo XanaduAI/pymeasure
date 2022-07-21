@@ -128,11 +128,11 @@ class Keithley2600(Instrument):
         else:
             return None
 
-    def get_id(self, check_errors=True):
+    def get_id(self, check_for_errors=True):
         """Requests and returns the identification of the instrument."""
         return self.ask(
             "*IDN?",
-            check_errors,
+            check_for_errors,
         ).strip()
 
     @staticmethod

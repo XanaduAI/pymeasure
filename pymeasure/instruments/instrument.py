@@ -189,7 +189,7 @@ class Instrument:
                 "Invalid Adapter provided for Instrument since PyVISA is not present"
             )
 
-        self.name = name
+        self.pymeasure_name = name
         self.SCPI = includeSCPI
         self.adapter = adapter
         self.adapter.connection.write_termination = write_termination
@@ -203,7 +203,7 @@ class Instrument:
             self.communication_success = False
         else:
             log.info(f"IDN: {idn}")
-            log.info(f"Connected to {self.name}")
+            log.info(f"Connected to {self.pymeasure_name}")
             self.communication_success = True
 
         self.isShutdown = False
@@ -666,7 +666,7 @@ class Instrument:
     def shutdown(self):
         """Brings the instrument to a safe and stable state"""
         self.isShutdown = True
-        log.info("Shutting down %s" % self.name)
+        log.info("Shutting down %s" % self.pymeasure_name)
 
 
 class BaseChannel(Instrument):

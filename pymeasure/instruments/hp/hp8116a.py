@@ -578,7 +578,7 @@ class HP8116A(Instrument):
             return []
         else:
             for error in errors:
-                log.error(f'{self.name}: {error}')
+                log.error(f'{self.pymeasure_name}: {error}')
             return errors
 
     def _wait_for_commands_processed(self, timeout=1):

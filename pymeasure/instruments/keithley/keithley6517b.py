@@ -217,7 +217,7 @@ class Keithley6517B(Instrument, KeithleyBuffer):
         :param auto_range: Enables auto_range if True, else uses the
                            resistance_range attribut
         """
-        log.info("%s is measuring resistance.", self.name)
+        log.info("%s is measuring resistance.", self.pymeasure_name)
         self.write(":SENS:FUNC 'RES';"
                    ":SENS:RES:NPLC %f;" % nplc)
         if auto_range:
@@ -234,7 +234,7 @@ class Keithley6517B(Instrument, KeithleyBuffer):
         :param auto_range: Enables auto_range if True, else uses the
                            voltage_range attribut
         """
-        log.info("%s is measuring voltage.", self.name)
+        log.info("%s is measuring voltage.", self.pymeasure_name)
         self.write(":SENS:FUNC 'VOLT';"
                    ":SENS:VOLT:NPLC %f;" % nplc)
         if auto_range:
@@ -251,7 +251,7 @@ class Keithley6517B(Instrument, KeithleyBuffer):
         :param auto_range: Enables auto_range if True, else uses the
                            current_range attribut
         """
-        log.info("%s is measuring current.", self.name)
+        log.info("%s is measuring current.", self.pymeasure_name)
         self.write(":SENS:FUNC 'CURR';"
                    ":SENS:CURR:NPLC %f;" % nplc)
         if auto_range:
@@ -272,7 +272,7 @@ class Keithley6517B(Instrument, KeithleyBuffer):
         :param voltage_range: A :attr:`~.Keithley6517B.voltage_range` value
                               or None (activates auto range)
         """
-        log.info("%s is sourcing voltage.", self.name)
+        log.info("%s is sourcing voltage.", self.pymeasure_name)
         if voltage_range is None:
             self.auto_range_source()
         else:
@@ -343,7 +343,7 @@ class Keithley6517B(Instrument, KeithleyBuffer):
     def shutdown(self):
         """ Ensures that the current or voltage is turned to zero
         and disables the output. """
-        log.info("Shutting down %s.", self.name)
+        log.info("Shutting down %s.", self.pymeasure_name)
         self.ramp_to_voltage(0.0)
         self.stop_buffer()
         self.disable_source()

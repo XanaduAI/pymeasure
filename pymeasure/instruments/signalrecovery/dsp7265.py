@@ -586,6 +586,6 @@ class DSP7265(Instrument):
         return data
 
     def shutdown(self):
-        log.info("Shutting down %s." % self.name)
+        log.info("Shutting down %s." % self.pymeasure_name)
         self.voltage = 0.
         self.isShutdown = True

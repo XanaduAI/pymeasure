@@ -210,4 +210,4 @@ class Ametek7270(Instrument):
         """ Ensures the instrument in a safe state """
         self.voltage = 0.
         self.isShutdown = True
-        log.info("Shutting down %s" % self.name)
+        log.info("Shutting down %s" % self.pymeasure_name)

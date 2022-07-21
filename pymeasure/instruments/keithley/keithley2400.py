@@ -391,7 +391,7 @@ class Keithley2400(Instrument, KeithleyBuffer):
         :param resistance: Upper limit of resistance in Ohms, from -210 MOhms to 210 MOhms
         :param auto_range: Enables auto_range if True, else uses the set resistance
         """
-        log.info("%s is measuring resistance." % self.name)
+        log.info("%s is measuring resistance." % self.pymeasure_name)
         self.write(":SENS:FUNC 'RES';"
                    ":SENS:RES:MODE MAN;"
                    ":SENS:RES:NPLC %f;:FORM:ELEM RES;" % nplc)
@@ -408,7 +408,7 @@ class Keithley2400(Instrument, KeithleyBuffer):
         :param voltage: Upper limit of voltage in Volts, from -210 V to 210 V
         :param auto_range: Enables auto_range if True, else uses the set voltage
         """
-        log.info("%s is measuring voltage." % self.name)
+        log.info("%s is measuring voltage." % self.pymeasure_name)
         self.write(":SENS:FUNC 'VOLT';"
                    ":SENS:VOLT:NPLC %f;:FORM:ELEM VOLT;" % nplc)
         if auto_range:
@@ -424,7 +424,7 @@ class Keithley2400(Instrument, KeithleyBuffer):
         :param current: Upper limit of current in Amps, from -1.05 A to 1.05 A
         :param auto_range: Enables auto_range if True, else uses the set current
         """
-        log.info("%s is measuring current." % self.name)
+        log.info("%s is measuring current." % self.pymeasure_name)
         self.write(":SENS:FUNC 'CURR';"
                    ":SENS:CURR:NPLC %f;:FORM:ELEM CURR;" % nplc)
         if auto_range:
@@ -451,7 +451,7 @@ class Keithley2400(Instrument, KeithleyBuffer):
                                    :attr:`~.Keithley2400.compliance_voltage`
         :param current_range: A :attr:`~.Keithley2400.current_range` value or None
         """
-        log.info("%s is sourcing current." % self.name)
+        log.info("%s is sourcing current." % self.pymeasure_name)
         self.source_mode = 'current'
         if current_range is None:
             self.auto_range_source()
@@ -470,7 +470,7 @@ class Keithley2400(Instrument, KeithleyBuffer):
                                    :attr:`~.Keithley2400.compliance_current`
         :param voltage_range: A :attr:`~.Keithley2400.voltage_range` value or None
         """
-        log.info("%s is sourcing voltage." % self.name)
+        log.info("%s is sourcing voltage." % self.pymeasure_name)
         self.source_mode = 'voltage'
         if voltage_range is None:
             self.auto_range_source()
@@ -756,7 +756,7 @@ class Keithley2400(Instrument, KeithleyBuffer):
     def shutdown(self):
         """ Ensures that the current or voltage is turned to zero
         and disables the output. """
-        log.info("Shutting down %s." % self.name)
+        log.info("Shutting down %s." % self.pymeasure_name)
         if self.source_mode == 'current':
             self.ramp_to_current(0.0)
         else:
