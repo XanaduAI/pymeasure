@@ -500,7 +500,7 @@ class Channel(BaseChannel):
                 and the second dimension being the measured current values.
         """
         # Sweep command times out at the default timeout duration
-        self.adapter.connection.timeout = timeout
+        self.instrument.adapter.connection.timeout = timeout
 
         self.clear_buffer(1)
         self.buffer_1_source_value_collection = True
@@ -513,7 +513,7 @@ class Channel(BaseChannel):
         voltage_values = self.buffer_ascii_values(1, "sourcevalues")
         measurement_values = self.buffer_ascii_values(1, "readings")
 
-        self.adapter.connection.timeout = self.default_timeout
+        self.instrument.adapter.connection.timeout = self.instrument.default_timeout
         return np.array([voltage_values, measurement_values])
 
     def shutdown(self):
