@@ -41,7 +41,7 @@ log.addHandler(logging.NullHandler())
 
 
 class Keithley2600(Instrument):
-    """Represents the Keithley 2600 series (channel A and B) SourceMeter"""
+    """Represents the Keithley 2600 series (channel A and B) SourceMeter."""
 
     id_starts_with = "Keithley"
 
@@ -55,9 +55,8 @@ class Keithley2600(Instrument):
         self.default_timeout = self.adapter.connection.timeout
 
     def _flush_errors(self):
-        """Returns a list of errors where each element includes the error code
-        and message.
-        """
+        """Returns a list of errors where each element includes the error code and
+        message."""
         self._wait_until_ready()
         errors = []
         while True:
@@ -80,7 +79,7 @@ class Keithley2600(Instrument):
             return errors
 
     def clear(self):
-        """Clears the instrument status byte"""
+        """Clears the instrument status byte."""
         self.write("status.reset()")
 
     def reset(self):
@@ -116,9 +115,10 @@ class Keithley2600(Instrument):
 
     @property
     def complete(self):
-        """This property allows synchronization between a controller and a device. The Operation Complete
-        query places an ASCII character 1 into the device's Output Queue when all pending
-        selected device operations have been finished.
+        """This property allows synchronization between a controller and a device.
+
+        The Operation Complete query places an ASCII character 1 into the device's
+        Output Queue when all pending selected device operations have been finished.
         """
         ready = self.ask_no_lock("waitcomplete() print([[1]])").strip()
         if ready == "1":
@@ -175,14 +175,13 @@ class Channel(BaseChannel):
         self.instrument.write(f"smu{self.channel}.{cmd}")
 
     def values(self, cmd, **kwargs):
-        """Reads a set of values from the instrument through the adapter,
-        passing on any key-word arguments.
-        """
+        """Reads a set of values from the instrument through the adapter, passing on any
+        key-word arguments."""
         return self.instrument.values(f"print(smu{self.channel}.{cmd})")
 
     def buffer_ascii_values(self, buffer_number, cmd=None, **kwargs) -> np.array:
-        """Reads a set of ascii values from one of the channel's buffers through the adapter,
-        passing on any key-word arguments.
+        """Reads a set of ascii values from one of the channel's buffers through the
+        adapter, passing on any key-word arguments.
 
         Args:
             buffer_number: The buffer number to read from.
@@ -363,6 +362,7 @@ class Channel(BaseChannel):
 
     def measure_voltage(self, nplc=1, voltage=21.0, auto_range=True):
         """Configures the measurement of voltage.
+
         :param nplc: Number of power line cycles (NPLC) from 0.001 to 25
         :param voltage: Upper limit of voltage in Volts, from -200 V to 200 V
         :param auto_range: Enables auto_range if True, else uses the set voltage
@@ -377,6 +377,7 @@ class Channel(BaseChannel):
 
     def measure_current(self, nplc=1, current=1.05e-4, auto_range=True):
         """Configures the measurement of current.
+
         :param nplc: Number of power line cycles (NPLC) from 0.001 to 25
         :param current: Upper limit of current in Amps, from -1.5 A to 1.5 A
         :param auto_range: Enables auto_range if True, else uses the set current
@@ -397,9 +398,9 @@ class Channel(BaseChannel):
             self.write("source.autorangev=1")
 
     def apply_current(self, current_range=None, compliance_voltage=0.1):
-        """Configures the instrument to apply a source current, and
-        uses an auto range unless a current range is specified.
-        The compliance voltage is also set.
+        """Configures the instrument to apply a source current, and uses an auto range
+        unless a current range is specified. The compliance voltage is also set.
+
         :param compliance_voltage: A float in the correct range for a
                                    :attr:`~.Keithley2600.compliance_voltage`
         :param current_range: A :attr:`~.Keithley2600.current_range` value or None
@@ -413,9 +414,9 @@ class Channel(BaseChannel):
         self.compliance_voltage = compliance_voltage
 
     def apply_voltage(self, voltage_range=None, compliance_current=0.1):
-        """Configures the instrument to apply a source voltage, and
-        uses an auto range unless a voltage range is specified.
-        The compliance current is also set.
+        """Configures the instrument to apply a source voltage, and uses an auto range
+        unless a voltage range is specified. The compliance current is also set.
+
         :param compliance_current: A float in the correct range for a
                                    :attr:`~.Keithley2600.compliance_current`
         :param voltage_range: A :attr:`~.Keithley2600.voltage_range` value or None
@@ -429,22 +430,26 @@ class Channel(BaseChannel):
         self.compliance_current = compliance_current
 
     def ramp_to_voltage(self, target_voltage, steps=30, pause=0.1):
-        """Ramps to a target voltage from the set voltage value over
-        a certain number of linear steps, each separated by a pause duration.
+        """Ramps to a target voltage from the set voltage value over a certain number of
+        linear steps, each separated by a pause duration.
+
         :param target_voltage: A voltage in Amps
         :param steps: An integer number of steps
-        :param pause: A pause duration in seconds to wait between steps"""
+        :param pause: A pause duration in seconds to wait between steps
+        """
         voltages = np.linspace(self.source_voltage, target_voltage, steps)
         for voltage in voltages:
             self.source_voltage = voltage
             time.sleep(pause)
 
     def ramp_to_current(self, target_current, steps=30, pause=0.1):
-        """Ramps to a target current from the set current value over
-        a certain number of linear steps, each separated by a pause duration.
+        """Ramps to a target current from the set current value over a certain number of
+        linear steps, each separated by a pause duration.
+
         :param target_current: A current in Amps
         :param steps: An integer number of steps
-        :param pause: A pause duration in seconds to wait between steps"""
+        :param pause: A pause duration in seconds to wait between steps
+        """
         currents = np.linspace(self.source_current, target_current, steps)
         for current in currents:
             self.source_current = current
@@ -496,8 +501,8 @@ class Channel(BaseChannel):
                 returns. This parameter defaults to 25000 (25 seconds).
 
         Returns:
-            Returns a 2D numpy array, with the first dimension being the measured voltage values,
-                and the second dimension being the measured current values.
+            Returns a 2D numpy array, with ``[0][:]`` being the measured voltage values,
+                and ``[1][:]`` being the measured current values.
         """
         # Sweep command times out at the default timeout duration
         self.instrument.adapter.connection.timeout = timeout
@@ -517,8 +522,8 @@ class Channel(BaseChannel):
         return np.array([voltage_values, measurement_values])
 
     def shutdown(self):
-        """Ensures that the current or voltage is turned to zero
-        and disables the output."""
+        """Ensures that the current or voltage is turned to zero and disables the
+        output."""
         log.info(f"Shutting down channel {self.channel}.")
         if self.source_mode == "current":
             self.ramp_to_current(0.0)
