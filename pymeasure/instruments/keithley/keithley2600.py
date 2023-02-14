@@ -496,8 +496,8 @@ class Channel(BaseChannel):
                 returns. This parameter defaults to 25000 (25 seconds).
 
         Returns:
-            Returns a 2D numpy array, with the first dimension being the measured voltage values,
-                and the second dimension being the measured current values.
+            Returns a 2D numpy array, with the first row being the measured voltage values,
+                and the second row being the measured current values.
         """
         # Sweep command times out at the default timeout duration
         self.instrument.adapter.connection.timeout = timeout
