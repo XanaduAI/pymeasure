@@ -36,9 +36,9 @@ log.addHandler(logging.NullHandler())
 
 class Keithley2602B(Keithley2600):
     """Represents the Keithley 2602B SourceMeter. This class adds digital I/O
-    functionality to the Keithley2600 series driver. Note that this driver can
-    be used to control any of the other 2600 series models that support digital
-    I/O (2601B, 2611B, 2612B, 2635B, 2636B).
+    functionality to the Keithley2600 series driver. Note that this driver can be used
+    to control any of the other 2600 series models that support digital I/O (2601B,
+    2611B, 2612B, 2635B, 2636B).
 
     Manual:
     https://drive.google.com/file/d/19_jllFNPkVmcRw9TuJlywFlwgmDTnIuu/view?usp=sharing
@@ -57,10 +57,9 @@ class Keithley2602B(Keithley2600):
         ]
 
     def __init__(self, hostname: str, port: int = 5025, **kwargs) -> None:
-        """Initializes LAN communication with the device.
-        Flushes the error queue and logs the system identification info.
-        If ID info cannot be retrieved, or communication was not successfully
-        initialized, the results are logged.
+        """Initializes LAN communication with the device. Flushes the error queue and
+        logs the system identification info. If ID info cannot be retrieved, or
+        communication was not successfully initialized, the results are logged.
 
         Args:
             hostname (str): Hostname of the system. Note that the hostname can be overwritten.
@@ -88,11 +87,11 @@ class Keithley2602B(Keithley2600):
 
     @staticmethod
     def get_trigger_event_description_strings() -> List[str]:
-        """Returns a list of the valid event IDs that can be used to select the event that
-        causes a trigger to be asserted on the digital output line. The list can be indexed
-        to set a digitial I/O line to assert a trigger given the described conditions. E.g.
-        to set digital line 4 to assert a trigger when the SMU completes a source
-        action on channel A, use the following:
+        """Returns a list of the valid event IDs that can be used to select the event
+        that causes a trigger to be asserted on the digital output line. The list can be
+        indexed to set a digitial I/O line to assert a trigger given the described
+        conditions. E.g. to set digital line 4 to assert a trigger when the SMU
+        completes a source action on channel A, use the following:
 
         .. code-block:: python
 
@@ -116,7 +115,8 @@ class Keithley2600DigitalIOPin(BaseChannel):
         return self.instrument.ask(f"print(digio.trigger[{self.pin_number}].{cmd})")
 
     def write(self, cmd: str) -> None:
-        self.instrument.write(f"digio.trigger.[{self.pin_number}].{cmd}")
+        self.instrument.write(f"digio.trigger[{self.pin_number}].{cmd}")
+        log.debug(cmd)
 
     def check_errors(self) -> None:
         self.instrument.check_errors()
@@ -134,21 +134,25 @@ class Keithley2600DigitalIOPin(BaseChannel):
         self.write("clear()")
 
     def get_event_id(self) -> int:
-        """This method returns the mode in which the trigger event detector and
-        the output trigger generator operate on the given trigger line. See description
-        of all the possible EVENT_IDs on page 9-57 of the Series 2600B Reference Manual.
+        """This method returns the mode in which the trigger event detector and the
+        output trigger generator operate on the given trigger line.
+
+        See description of all the possible EVENT_IDs on page 9-57 of the Series 2600B
+        Reference Manual.
         """
 
         id = self.ask("EVENT_ID")
         return int(id)
 
     def get_overrun_status(self) -> bool:
-        """This method returns the event detector overrun status. If this is
-        true, an event was ignored because the event detector was already in the
-        detected state when the event occurred. This is an indication of the
-        state of the event detector built into the line itself. It does not
-        indicate if an overrun occurred in any other part of the trigger model
-        or in any other detector that is monitoring the event."""
+        """This method returns the event detector overrun status.
+
+        If this is true, an event was ignored because the event detector was already in
+        the detected state when the event occurred. This is an indication of the state
+        of the event detector built into the line itself. It does not indicate if an
+        overrun occurred in any other part of the trigger model or in any other detector
+        that is monitoring the event.
+        """
 
         response_status = self.ask("overrun")
 
@@ -168,9 +172,10 @@ class Keithley2600DigitalIOPin(BaseChannel):
         self.write("release()")
 
     def reset_trigger_values(self) -> None:
-        """This method resets trigger values to their factory defaults. It
-        sets the mode, pulsewidth, stimulus, and overrun status to factory
-        default settings.
+        """This method resets trigger values to their factory defaults.
+
+        It sets the mode, pulsewidth, stimulus, and overrun status to factory default
+        settings.
         """
 
         log.info(
@@ -179,9 +184,9 @@ class Keithley2600DigitalIOPin(BaseChannel):
         self.write("reset()")
 
     def wait_for_trigger(self, timeout: float) -> None:
-        """This method waits for a trigger for up to a maximum of the timeout value (in seconds).
-        Returns True if a trigger was detected, false if the timout was reached and no trigger was
-        detected.
+        """This method waits for a trigger for up to a maximum of the timeout value (in
+        seconds). Returns True if a trigger was detected, false if the timout was
+        reached and no trigger was detected.
 
         Args:
             timeout: The amount of time to wait in seconds.
