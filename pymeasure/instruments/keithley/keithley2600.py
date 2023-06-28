@@ -468,14 +468,15 @@ class Channel(BaseChannel):
     def sweep_voltage_measure_current(
         self,
         current_limit: float,
-        current_measurement_range: float,
         sweep_start_v: float,
         sweep_end_v: float,
         settling_time: pydantic.confloat(ge=0),
         number_of_sweep_points: pydantic.conint(ge=2),
+        current_measurement_range: float = None,
+        autorange: bool = True,
         timeout: int = 250000,
     ) -> np.ndarray:
-        """Performs a inear voltage sweep with current measured at every step (point).
+        """Performs a linear voltage sweep with current measured at every step (point).
 
         The steps followed can be seen below:
 
@@ -490,11 +491,12 @@ class Channel(BaseChannel):
 
         Args:
             current_limit: The maximum current that should be sourced in amperes.
-            current_measurement_range: The measurement range to use when measuring the current.
             sweep_start_v: Starting sweep voltage (in volts).
             sweep_end_v: Ending sweep voltage (in volts).
             settling_time: The settling time used before making a measurement (in seconds).
             number_of_sweep_points: The number of points to sweep for.
+            current_measurement_range: The measurement range to use when measuring the current.
+            autorange: Set to ``True`` to autorange current measurements.
             timeout: Visa Timeout value in milliseconds. The sweep command causes a Visa timeout error
                 to be raised at the default timeout value. The timeout is changed to the specified value
                 before the sweep command is sent, and changed back to the default value before this method
@@ -510,8 +512,13 @@ class Channel(BaseChannel):
         self.clear_buffer(1)
         self.buffer_1_source_value_collection = True
 
+        if current_measurement_range is not None:
+            self.current_range = current_measurement_range
+        
+        if autorange:
+            self.write("measure.autorangei=1")
+
         self.compliance_current = current_limit
-        self.current_range = current_measurement_range
         self.instrument.write(
             f"SweepVLinMeasureI(smu{self.channel}, {sweep_start_v}, {sweep_end_v}, {settling_time}, {number_of_sweep_points})"
         )
