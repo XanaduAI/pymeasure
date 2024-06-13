@@ -24,10 +24,10 @@
 import logging
 import time
 from typing import List, Literal
-from typing_extensions import Annotated
 
 import numpy as np
 import pydantic
+from typing_extensions import Annotated
 
 from pymeasure.instruments.instrument import BaseChannel, Instrument
 from pymeasure.instruments.validators import (
