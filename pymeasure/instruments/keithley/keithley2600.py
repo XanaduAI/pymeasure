@@ -24,6 +24,7 @@
 import logging
 import time
 from typing import List, Literal
+from typing_extensions import Annotated
 
 import numpy as np
 import pydantic
@@ -136,11 +137,11 @@ class Keithley2600(Instrument):
         ).strip()
 
     @staticmethod
-    @pydantic.validate_arguments
+    @pydantic.validate_call
     def get_sweep_list(
         sweep_start: float,
         sweep_end: float,
-        number_of_sweep_points: pydantic.conint(ge=2),
+        number_of_sweep_points: Annotated[int, pydantic.Field(ge=2)],
     ) -> List[float]:
         """Get the list of sweep steps to be taken.
 
@@ -455,7 +456,7 @@ class Channel(BaseChannel):
             self.source_current = current
             time.sleep(pause)
 
-    @pydantic.validate_arguments
+    @pydantic.validate_call
     def clear_buffer(self, buffer_number: Literal[1, 2]):
         """Clears the specified buffer.
 
@@ -464,14 +465,14 @@ class Channel(BaseChannel):
         """
         self.write(f"nvbuffer{buffer_number}.clear()")
 
-    @pydantic.validate_arguments
+    @pydantic.validate_call
     def sweep_voltage_measure_current(
         self,
         current_limit: float,
         sweep_start_v: float,
         sweep_end_v: float,
-        settling_time: pydantic.confloat(ge=0),
-        number_of_sweep_points: pydantic.conint(ge=2),
+        settling_time: Annotated[float, pydantic.Field(ge=0)],
+        number_of_sweep_points: Annotated[int, pydantic.Field(ge=2)],
         current_measurement_range: float = None,
         autorange: bool = True,
         timeout: int = 250000,
@@ -514,7 +515,7 @@ class Channel(BaseChannel):
 
         if current_measurement_range is not None:
             self.current_range = current_measurement_range
-        
+
         if autorange:
             self.write("measure.autorangei=1")
 
