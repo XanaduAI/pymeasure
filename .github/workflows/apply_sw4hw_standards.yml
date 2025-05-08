@@ -18,15 +18,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: install socat
-        run: |
-          sudo apt install -y socat
-
-      - name: Configure git with qubot
-        run: |
-          git config --global user.name 'The OG Bot Betty McBottington'
-          git config --global user.email 'sw4hw-team@xanadu.ai'
-
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
