@@ -54,7 +54,6 @@ python-vxi11 = [
 tests = [
     "pytest>=3.3.0",
     "pytest-cov>=4.1.0",
-    "pytest-qt>=2.4.0",
     "pyvisa-sim>=0.4.0",
 ]
 # install pyqt or pyside manually as desired
