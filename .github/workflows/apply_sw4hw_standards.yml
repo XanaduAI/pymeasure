@@ -36,7 +36,7 @@ jobs:
         uses: xanaduAI/cloud-actions/og/unit@main
         with:
           key: ${{ secrets.XANADU_OG_QUBOT }}
-          path: tests
+          path: tests/instruments
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
