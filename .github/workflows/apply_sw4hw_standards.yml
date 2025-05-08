@@ -1,5 +1,3 @@
-#Run linters and auto bump the version file based on PR body > PR title > `patch` default.
-
 name: Apply SW4HW Standards
 on: 
   workflow_dispatch:
