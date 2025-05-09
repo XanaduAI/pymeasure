@@ -23,7 +23,13 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Pip install
+        shell: bash
+        run: 
+          pip install -r ./requirements.txt pytest pytest-cov
+
       - name: Run tests
+        shell: bash
         run: 
           python -m pytest instruments --showlocals --full-trace --cov=pymeasure --cov-report xml:coverage.xml --cov-report term-missing --junitxml junit.xml
 
