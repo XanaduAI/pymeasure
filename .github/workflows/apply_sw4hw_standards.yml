@@ -21,13 +21,11 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
-      - name: Cloud-action test
-        uses: xanaduAI/cloud-actions/og/unit@main
-        with:
-          key: ${{ secrets.XANADU_OG_QUBOT }}
-          path: tests/instruments
+      - name: Run tests
+        run: 
+          python -m pytest instruments --showlocals --full-trace --cov=pymeasure --cov-report xml:coverage.xml --cov-report term-missing --junitxml junit.xml
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
