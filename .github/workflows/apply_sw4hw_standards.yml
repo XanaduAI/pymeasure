@@ -31,7 +31,7 @@ jobs:
       - name: Run tests
         shell: bash
         run: 
-          python -m pytest instruments --showlocals --full-trace --cov=pymeasure --cov-report xml:coverage.xml --cov-report term-missing --junitxml junit.xml
+          python -m pytest tests/instruments --showlocals --full-trace --cov=pymeasure --cov-report xml:coverage.xml --cov-report term-missing --junitxml junit.xml
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
