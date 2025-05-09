@@ -1,0 +1,4 @@
+-e .[tests]
+pytest
+pytest-cov
+pydantic
